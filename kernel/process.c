@@ -11,7 +11,6 @@ void process_init(void) {
         process_table[i].state = PROCESS_TERMINATED;
     }
     
-    // Main kernel process sits at index 0
     process_table[0].state = PROCESS_RUNNING;
     total_processes = 1;
 }
@@ -24,14 +23,15 @@ int process_create(void (*entry_point)(void)) {
     p->pid = idx;
     p->state = PROCESS_READY;
 
-    // Point ESP to the top of the allocated stack space
     uint32_t *sp = (uint32_t *)(p->stack + STACK_SIZE);
 
-    // Initial stack frame layout for ctx_switch return
-    *(--sp) = (uint32_t)entry_point; // Return address
-    *(--sp) = 0x202;                // EFLAGS (Interrupts enabled)
-    
-    // Initial dummy registers for pusha (EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI)
+    // 1. Entry point (popped by ret in ctx_switch)
+    *(--sp) = (uint32_t)entry_point;
+
+    // 2. Initial EFLAGS with IF=1 (0x202) (popped by popfd)
+    *(--sp) = 0x202;
+
+    // 3. 8 dummy registers for EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX (popped by popad)
     for (int i = 0; i < 8; i++) {
         *(--sp) = 0;
     }
@@ -47,7 +47,6 @@ void schedule(void) {
     int prev_idx = current_process_idx;
     int next_idx = (current_process_idx + 1) % total_processes;
 
-    // Find next ready process
     while (process_table[next_idx].state != PROCESS_READY && next_idx != prev_idx) {
         next_idx = (next_idx + 1) % total_processes;
     }

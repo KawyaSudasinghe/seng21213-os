@@ -1,23 +1,16 @@
 [BITS 32]
 global ctx_switch
 
-; void ctx_switch(uint32_t *old_esp, uint32_t new_esp);
 ctx_switch:
-    ; 1. Save general registers and flags of current process
-    pusha
-    pushf
+    pushfd                  ; Push 32-bit EFLAGS (4 bytes)
+    pushad                  ; Push all 32-bit GP registers (32 bytes)
 
-    ; 2. Retrieve arguments from original stack position
-    mov eax, [esp + 40]    ; pointer to old_esp
-    mov ecx, [esp + 44]    ; new_esp value
+    mov eax, [esp + 40]     ; Address of old_esp (4 ret + 4 flags + 32 regs = 40)
+    mov [eax], esp          ; Save current stack pointer
 
-    ; 3. Store current ESP into old process PCB
-    mov [eax], esp
+    mov edx, [esp + 44]     ; Address of new_esp (40 + 4)
+    mov esp, edx            ; Switch to new process stack
 
-    ; 4. Switch to new process stack
-    mov esp, ecx
-
-    ; 5. Restore registers and flags of new process
-    popf
-    popa
-    ret
+    popad                   ; Restore 32-bit GP registers
+    popfd                   ; Restore 32-bit EFLAGS
+    ret                     ; Jump to entry point / return location

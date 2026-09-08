@@ -5,7 +5,7 @@ OBJCOPY = objcopy
 
 CFLAGS = -std=gnu99 -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -Wall -Wextra -O2 -I./include
 
-OBJS = build/kernel_entry.o build/switch.o build/kernel.o build/vga.o build/keyboard.o build/process.o
+OBJS = build/kernel_entry.o build/switch.o build/interrupt.o build/kernel.o build/vga.o build/keyboard.o build/process.o build/idt.o build/timer.o
 
 all: seng21213-os.img
 
@@ -20,6 +20,10 @@ build/kernel_entry.o: kernel/kernel_entry.asm
 build/switch.o: kernel/switch.asm
 	@mkdir -p build
 	$(AS) -f elf32 kernel/switch.asm -o build/switch.o
+
+build/interrupt.o: kernel/interrupt.asm
+	@mkdir -p build
+	$(AS) -f elf32 kernel/interrupt.asm -o build/interrupt.o
 
 build/%.o: kernel/%.c
 	@mkdir -p build
@@ -39,5 +43,6 @@ seng21213-os.img: build/boot.bin build/kernel.bin
 clean:
 	rm -rf build seng21213-os.img
 
-run:
-	qemu-system-i386 -fda seng21213-os.img
+
+run: seng21213-os.img
+	qemu-system-i386 -fda seng21213-os.img -display curses
