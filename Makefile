@@ -5,7 +5,7 @@ OBJCOPY = objcopy
 
 CFLAGS = -std=gnu99 -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -Wall -Wextra -O2 -I./include
 
-OBJS = build/kernel_entry.o build/switch.o build/interrupt.o build/kernel.o build/vga.o build/keyboard.o build/process.o build/idt.o build/timer.o kernel/pmm.o
+OBJS = build/kernel_entry.o build/switch.o build/interrupt.o build/kernel.o build/vga.o build/keyboard.o build/process.o build/idt.o build/timer.o build/pmm.o build/paging.o
 
 
 

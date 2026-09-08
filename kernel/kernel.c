@@ -1,4 +1,4 @@
-
+#include <paging.h>
 #include <pmm.h>
 #include "vga.h"
 #include <process.h>
@@ -27,6 +27,7 @@ void kernel_main(void) {
     vga_clear(0);
     vga_puts("Initializing Physical Memory Manager...\n");
     pmm_init(1024 * 1024 * 16, 0x100000); // 16MB total memory, bitmap at 1MB
+    paging_init();
 
     vga_puts("Initializing Stage 2 Preemptive Scheduler...\n");
 
@@ -42,3 +43,4 @@ void kernel_main(void) {
 
     while (1);
 }
+
