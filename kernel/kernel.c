@@ -1,3 +1,5 @@
+
+#include <pmm.h>
 #include "vga.h"
 #include <process.h>
 #include <idt.h>
@@ -23,6 +25,9 @@ void task_b(void) {
 
 void kernel_main(void) {
     vga_clear(0);
+    vga_puts("Initializing Physical Memory Manager...\n");
+    pmm_init(1024 * 1024 * 16, 0x100000); // 16MB total memory, bitmap at 1MB
+
     vga_puts("Initializing Stage 2 Preemptive Scheduler...\n");
 
     idt_init();
