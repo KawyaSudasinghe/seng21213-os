@@ -1,141 +1,43 @@
-# =============================================================================
-# SENG21213-OS :: Makefile
-# =============================================================================
-#
-# TOOLCHAIN SETUP
-#   Option A (recommended): Use the Docker environment provided
-#              docker build -t seng21213-os .
-#              docker run --rm -v $(pwd):/os seng21213-os
-#
-#   Option B: Native cross-compiler
-#              Install i686-elf-gcc (see README.md § Toolchain)
-#              Set CC and LD to point to the cross tools.
-#
-#   Option C: Ubuntu/Debian with gcc-multilib
-#              sudo apt install gcc gcc-multilib nasm qemu-system-x86
-#              Use CC=gcc with the -m32 flag (already set below).
-#
-# =============================================================================
+CC = gcc
+AS = nasm
+LD = ld
+OBJCOPY = objcopy
 
-# ---------------------------------------------------------------------------
-# Toolchain
-# ---------------------------------------------------------------------------
-AS       := nasm
-ASFLAGS  := -f elf32
+CFLAGS = -std=gnu99 -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -Wall -Wextra -O2 -I./include
 
-# Try the cross-compiler first; fall back to native gcc -m32
-ifneq (, $(shell which i686-elf-gcc 2>/dev/null))
-    CC   := i686-elf-gcc
-    LD   := i686-elf-ld
-    CFLAGS := -std=gnu99 -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib \
-              -Wall -Wextra -O2 -I./include
-    LDFLAGS := -m elf_i386 -nostdlib
-else
-    CC   := gcc
-    LD   := ld
-    CFLAGS := -std=gnu99 -m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib \
-              -Wall -Wextra -O2 -I./include
-    LDFLAGS := -m elf_i386 -nostdlib
-endif
+OBJS = build/kernel_entry.o build/switch.o build/kernel.o build/vga.o build/keyboard.o build/process.o
 
-# ---------------------------------------------------------------------------
-# Sources & Objects
-# ---------------------------------------------------------------------------
-BOOT_SRC  := boot/boot.asm
-BOOT_BIN  := boot/boot.bin
+all: seng21213-os.img
 
-KERNEL_ASM_SRC := kernel/kernel_entry.asm
-KERNEL_ASM_OBJ := build/kernel_entry.o
-
-KERNEL_C_SRCS  := kernel/kernel.c \
-                   kernel/vga.c    \
-                   kernel/keyboard.c
-
-# Add your new source files below as the course progresses:
-# Lecture 09: kernel/process.c kernel/scheduler.c
-# Lecture 10: kernel/thread.c  kernel/mutex.c
-# Lecture 11: kernel/pmm.c     kernel/vmm.c
-# Lecture 12: kernel/fs.c
-
-KERNEL_C_OBJS  := $(patsubst kernel/%.c, build/%.o, $(KERNEL_C_SRCS))
-KERNEL_ELF     := build/kernel.elf
-KERNEL_BIN     := build/kernel.bin
-OS_IMAGE       := seng21213-os.img
-
-# ---------------------------------------------------------------------------
-# Default target
-# ---------------------------------------------------------------------------
-.PHONY: all clean run run-debug info
-
-all: $(OS_IMAGE)
-	@echo ""
-	@echo "  ✓  Build successful → $(OS_IMAGE)"
-	@echo "  →  Run with:  make run"
-	@echo ""
-
-# ---------------------------------------------------------------------------
-# Bootloader
-# ---------------------------------------------------------------------------
-$(BOOT_BIN): $(BOOT_SRC)
+build/boot.bin: boot/boot.asm
 	@mkdir -p build
-	@echo "  [AS]  $<"
-	$(AS) -f bin $< -o $@
+	$(AS) -f bin boot/boot.asm -o build/boot.bin
 
-# ---------------------------------------------------------------------------
-# Kernel: Assembly object
-# ---------------------------------------------------------------------------
-$(KERNEL_ASM_OBJ): $(KERNEL_ASM_SRC)
+build/kernel_entry.o: kernel/kernel_entry.asm
 	@mkdir -p build
-	@echo "  [AS]  $<"
-	$(AS) $(ASFLAGS) $< -o $@
+	$(AS) -f elf32 kernel/kernel_entry.asm -o build/kernel_entry.o
 
-# ---------------------------------------------------------------------------
-# Kernel: C objects
-# ---------------------------------------------------------------------------
+build/switch.o: kernel/switch.asm
+	@mkdir -p build
+	$(AS) -f elf32 kernel/switch.asm -o build/switch.o
+
 build/%.o: kernel/%.c
 	@mkdir -p build
-	@echo "  [CC]  $<"
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# ---------------------------------------------------------------------------
-# Link kernel ELF, then extract flat binary
-# ---------------------------------------------------------------------------
-$(KERNEL_ELF): $(KERNEL_ASM_OBJ) $(KERNEL_C_OBJS)
-	@echo "  [LD]  $@"
-	$(LD) $(LDFLAGS) -T linker.ld $^ -o $@
+build/kernel.elf: $(OBJS)
+	$(LD) -m elf_i386 -nostdlib -T linker.ld $(OBJS) -o build/kernel.elf
 
-$(KERNEL_BIN): $(KERNEL_ELF)
-	@echo "  [OBJCOPY] $@"
-	objcopy -O binary $< $@
+build/kernel.bin: build/kernel.elf
+	$(OBJCOPY) -O binary build/kernel.elf build/kernel.bin
 
-# ---------------------------------------------------------------------------
-# Disk image: 1.44 MB floppy (boot sector + kernel)
-# ---------------------------------------------------------------------------
-$(OS_IMAGE): $(BOOT_BIN) $(KERNEL_BIN)
-	@echo "  [IMG]  Creating $(OS_IMAGE)..."
-	dd if=/dev/zero  bs=512 count=2880 of=$(OS_IMAGE) 2>/dev/null
-	dd if=$(BOOT_BIN)    conv=notrunc bs=512 count=1    of=$(OS_IMAGE) 2>/dev/null
-	dd if=$(KERNEL_BIN)  conv=notrunc bs=512 seek=1     of=$(OS_IMAGE) 2>/dev/null
-	@echo "  [IMG]  $(OS_IMAGE) ready ($(shell wc -c < $(KERNEL_BIN)) kernel bytes)"
-
-# ---------------------------------------------------------------------------
-# Run in QEMU
-# ---------------------------------------------------------------------------
-QEMU      := qemu-system-i386
-QEMUFLAGS := -drive format=raw,file=$(OS_IMAGE) -m 32M
-
-run: $(OS_IMAGE)
-	@echo "  Starting QEMU... (Close window or press Ctrl+A X to exit)"
-	$(QEMU) $(QEMUFLAGS)
-
-# Debug: Pause at startup, expose GDB stub on port 1234
-run-debug: $(OS_IMAGE)
-	$(QEMU) $(QEMUFLAGS) -S -gdb tcp::1234 &
-	@echo "  QEMU paused. Connect GDB: target remote :1234"
-
-info:
-	@echo "Toolchain: CC=$(CC)  AS=$(AS)  LD=$(LD)"
+seng21213-os.img: build/boot.bin build/kernel.bin
+	dd if=/dev/zero bs=512 count=2880 of=seng21213-os.img 2>/dev/null
+	dd if=build/boot.bin conv=notrunc bs=512 count=1 of=seng21213-os.img 2>/dev/null
+	dd if=build/kernel.bin conv=notrunc bs=512 seek=1 of=seng21213-os.img 2>/dev/null
 
 clean:
-	rm -rf build $(OS_IMAGE)
-	@echo "  Cleaned."
+	rm -rf build seng21213-os.img
+
+run:
+	qemu-system-i386 -fda seng21213-os.img
